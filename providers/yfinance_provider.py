@@ -109,7 +109,12 @@ class YFinanceProvider(StockDataProvider):
     def get_stock(self, symbol: str) -> NormalizedStock:
         result = NormalizedStock(symbol=symbol, source=self.name)
         ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
+
+        try:
+             info = ticker.info or {}
+        except Exception as e:
+             print(f"YFinance Error: {e}")
+             raise
 
         if not info or (info.get("regularMarketPrice") is None and info.get("currentPrice") is None):
             raise ValueError(f"No data returned for '{symbol}'")

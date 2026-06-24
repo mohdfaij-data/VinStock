@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VinStock — Smarter Analysis. Better Investing.</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="brand">
+      <span class="bars">📈</span> VinStock
+    </div>
+    <div class="nav-links">
+      <a href="/" class="active">Home</a>
+      <a href="/screens">Screens</a>
+      <a href="/screens/custom">Tools</a>
+      <a href="/watchlist">Watchlist</a>
+      <a href="/about">About</a>
+    </div>
+    {% if current_user.is_authenticated %}
+      <div class="user-menu">
+        <span>Hi, {{ current_user.name }}</span>
+        <a href="/logout">Logout</a>
+      </div>
+    {% else %}
+      <div class="user-menu">
+        <a href="/login">Log in</a>
+        <a href="/register" class="signup-link">Sign up</a>
+      </div>
+    {% endif %}
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="hero">
+    <h1>Smarter Analysis.<br><span class="line2">Better Investing.</span></h1>
+    <p>Powerful stock analysis and screening tool built for investors in India.</p>
+  </section>
+
+  <div class="search-wrap">
+    <form class="search-bar" id="search-form" autocomplete="off">
+      <span>🔎</span>
+      <input type="text" id="search-input" placeholder="Search for a company..." />
+      <button type="submit" class="search-go">→</button>
+    </form>
+    <div class="search-results" id="search-results"></div>
+  </div>
+
+  <div class="quick-label">Quick analyze:</div>
+  <div class="chip-grid">
+    {% for c in quick_analyze %}
+    <a class="chip" href="/stock/{{ c.symbol }}">{{ c.name }}</a>
+    {% endfor %}
+  </div>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>Explore Screens</h2>
+        <p>Find the right stocks using our curated screens</p>
+      </div>
+      <button class="new-screen-btn">Create New Screen +</button>
+    </div>
+    <div class="card-grid-2">
+      <div class="screen-card">
+        <div class="icon" style="background:#e7f6ec;">📉</div>
+        <div>
+          <h3>Low on 10 year average earnings</h3>
+          <p>Find companies trading below their 10 year average earnings</p>
+        </div>
+        <div class="chev">›</div>
+      </div>
+      <div class="screen-card">
+        <div class="icon" style="background:#e8eefb;">🏢</div>
+        <div>
+          <h3>Capacity expansion</h3>
+          <p>Companies with increasing capacity and strong growth potential</p>
+        </div>
+        <div class="chev">›</div>
+      </div>
+      <div class="screen-card">
+        <div class="icon" style="background:#ece7fb;">📊</div>
+        <div>
+          <h3>Debt reduction</h3>
+          <p>Businesses consistently reducing their debt over the years</p>
+        </div>
+        <div class="chev">›</div>
+      </div>
+      <div class="screen-card">
+        <div class="icon" style="background:#fdf0db;">📈</div>
+        <div>
+          <h3>Companies creating new high</h3>
+          <p>Stocks making 52 week or all time high</p>
+        </div>
+        <div class="chev">›</div>
+      </div>
+      <div class="screen-card">
+        <div class="icon" style="background:#fbe7ea;">🌱</div>
+        <div>
+          <h3>Growth without dilution</h3>
+          <p>Strong growth without issuing new shares</p>
+        </div>
+        <div class="chev">›</div>
+      </div>
+      <div class="screen-card">
+        <div class="icon" style="background:#e1f3ee;">👥</div>
+        <div>
+          <h3>FII Buying</h3>
+          <p>Companies with increasing FII holding over recent quarters</p>
+        </div>
+        <div class="chev">›</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>Powerful Tools</h2>
+        <p>Advanced tools to level up your analysis</p>
+      </div>
+    </div>
+    <div class="tools-grid">
+      <div class="tool-card">
+        <div class="icon" style="background:#e7f6ec;">📋</div>
+        <h3>Stock Screener</h3>
+        <p>Run custom screens on 10+ years of financial data</p>
+      </div>
+      <div class="tool-card">
+        <div class="icon" style="background:#ece7fb;">🤖</div>
+        <h3>AI Insights</h3>
+        <p>Get intelligent insights from company data</p>
+      </div>
+      <div class="tool-card">
+        <div class="icon" style="background:#fdf0db;">📈</div>
+        <h3>Compare Stocks</h3>
+        <p>Compare financials and performance side by side</p>
+      </div>
+      <div class="tool-card">
+        <div class="icon" style="background:#e8eefb;">🔔</div>
+        <h3>Alerts</h3>
+        <p>Set alerts for price, results & key events</p>
+      </div>
+    </div>
+  </section>
+
+  <div style="height:24px;"></div>
+
+  <nav class="tabbar">
+    <a href="/" class="active">🏠<span>Home</span></a>
+    <a href="#">▦<span>Screens</span></a>
+    <a href="#" class="fab">🔍</a>
+    <a href="#">🛠<span>Tools</span></a>
+    <a href="#">👤<span>Login</span></a>
+  </nav>
+
+  <script>
+    const input = document.getElementById('search-input');
+    const resultsBox = document.getElementById('search-results');
+    const form = document.getElementById('search-form');
+    let timer = null;
+
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (!q) { resultsBox.classList.remove('show'); resultsBox.innerHTML = ''; return; }
+      timer = setTimeout(() => {
+        fetch(`/search?q=${encodeURIComponent(q)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (!data.length) { resultsBox.classList.remove('show'); return; }
+            resultsBox.innerHTML = data.map(c =>
+              `<a href="/stock/${c.symbol}"><span>${c.name}</span><span class="sym">${c.symbol}</span></a>`
+            ).join('');
+            resultsBox.classList.add('show');
+          });
+      }, 200);
+    });
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (q) window.location.href = `/stock/${encodeURIComponent(q)}`;
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!form.contains(e.target)) resultsBox.classList.remove('show');
+    });
+  </script>
+
+</body>
+</html>

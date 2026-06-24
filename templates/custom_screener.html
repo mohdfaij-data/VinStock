@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custom Screener — VinStock</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/"><span class="bars">📈</span> VinStock</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/screens">Screens</a>
+      <a href="/screens/custom" class="active">Tools</a>
+      <a href="/watchlist">Watchlist</a>
+      <a href="#">About</a>
+    </div>
+    {% if current_user.is_authenticated %}
+      <div class="user-menu"><span>Hi, {{ current_user.name }}</span><a href="/logout">Logout</a></div>
+    {% else %}
+      <div class="user-menu"><a href="/login">Log in</a><a href="/register" class="signup-link">Sign up</a></div>
+    {% endif %}
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="hero" style="padding-bottom:0;">
+    <h1 style="font-size:30px;">Custom Screener</h1>
+    <p>Build your own filters across valuation, profitability, growth, and financial health.</p>
+  </section>
+
+  <section class="section">
+    <form method="POST" id="screener-form">
+      <div id="condition-rows">
+        <div class="condition-row">
+          <select name="metric">
+            {% for key, label in metrics.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <select name="operator">
+            <option value="gt">&gt;</option>
+            <option value="gte">&ge;</option>
+            <option value="lt">&lt;</option>
+            <option value="lte">&le;</option>
+            <option value="eq">=</option>
+          </select>
+          <input type="number" step="any" name="value" placeholder="Value" required>
+        </div>
+      </div>
+      <button type="button" class="add-condition-btn" id="add-condition">+ Add another condition</button>
+      <div style="margin-top:18px;">
+        <button type="submit" class="btn-primary" style="width:auto; padding:12px 28px;">Run Screen</button>
+      </div>
+    </form>
+
+    {% if current_user.is_authenticated and conditions %}
+      <form method="POST" action="/screens/save" style="margin-top:14px; display:flex; gap:8px;">
+        <input type="hidden" name="filter_json" value='{{ conditions | tojson }}'>
+        <input type="text" name="name" placeholder="Name this screen to save it" style="padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-size:13.5px;">
+        <button type="submit" class="btn-secondary">Save Screen</button>
+      </form>
+    {% endif %}
+
+    <div class="results-toolbar" style="padding-left:0; padding-right:0; margin-top:32px;">
+      <span style="color:var(--ink-soft); font-size:14px;">{{ result_count }} stock(s) matched</span>
+    </div>
+
+    {% if results|length > 0 %}
+    <div class="results-table-wrap" style="margin-left:0; margin-right:0;">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Company</th><th>Sector</th><th>CMP</th><th>Market Cap</th><th>P/E</th><th>P/B</th>
+            <th>ROE</th><th>ROCE</th><th>Debt/Equity</th><th>Rev Growth</th><th>VinStock Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in results %}
+          <tr onclick="window.location='/stock/{{ r.symbol }}'">
+            <td><strong>{{ r.name }}</strong><br><span style="font-size:11px; color:var(--ink-soft);">{{ r.symbol }}</span></td>
+            <td>{{ r.sector }}</td>
+            <td>{{ r.price or "—" }}</td>
+            <td>{{ r.market_cap or "—" }}</td>
+            <td>{{ r.pe_ratio or "—" }}</td>
+            <td>{{ r.pb_ratio or "—" }}</td>
+            <td>{{ r.roe or "—" }}</td>
+            <td>{{ r.roce or "—" }}</td>
+            <td>{{ r.debt_to_equity or "—" }}</td>
+            <td>{{ r.revenue_growth or "—" }}</td>
+            <td>{{ r.vinstock_score if r.vinstock_score is not none else "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif conditions %}
+      <p style="color:var(--ink-soft);">No stocks matched these conditions. Try loosening a filter.</p>
+    {% endif %}
+  </section>
+
+  <div style="height:40px;"></div>
+
+  <script>
+    document.getElementById('add-condition').addEventListener('click', () => {
+      const rows = document.getElementById('condition-rows');
+      const newRow = rows.firstElementChild.cloneNode(true);
+      newRow.querySelectorAll('select, input').forEach(el => el.value = '');
+      rows.appendChild(newRow);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watchlist — VinStock</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/"><span class="bars">📈</span> VinStock</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/screens">Screens</a>
+      <a href="/screens/custom">Tools</a>
+      <a href="/watchlist" class="active">Watchlist</a>
+      <a href="#">About</a>
+    </div>
+    <div class="user-menu">
+      <span>Hi, {{ current_user.name }}</span>
+      <a href="/logout">Logout</a>
+    </div>
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="wl-layout">
+    <div class="wl-sidebar">
+      <h3>Your Watchlists</h3>
+      {% for wl in watchlists %}
+        <a href="/watchlist?id={{ wl.id }}" class="wl-list-item {{ 'active' if selected and wl.id == selected.id else '' }}">
+          {{ wl.name }} ({{ wl.items|length }})
+        </a>
+      {% endfor %}
+      <form method="POST" action="/watchlist/create" style="margin-top:14px;">
+        <input type="text" name="name" placeholder="New watchlist name" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13px; margin-bottom:6px;">
+        <button type="submit" class="btn-secondary" style="width:100%; font-size:13px;">+ Create Watchlist</button>
+      </form>
+    </div>
+
+    <div class="wl-main">
+      {% if selected %}
+        <h2 style="margin:0 0 4px;">{{ selected.name }}</h2>
+        <p style="color:var(--ink-soft); font-size:13.5px; margin:0 0 18px;">{{ items|length }} stock(s)</p>
+
+        <form class="wl-add-form" method="POST" action="/watchlist/{{ selected.id }}/add">
+          <input type="text" name="symbol" placeholder="Symbol e.g. TCS or TCS.NS" required>
+          <select name="tag">
+            <option value="">No tag</option>
+            <option value="Long Term">Long Term</option>
+            <option value="Swing">Swing</option>
+            <option value="Dividend">Dividend</option>
+            <option value="Watching">Watching</option>
+          </select>
+          <input type="text" name="notes" placeholder="Notes (optional)">
+          <button type="submit" class="btn-primary" style="width:auto; padding:9px 18px;">Add</button>
+        </form>
+
+        {% if items|length > 0 %}
+          <table class="wl-table">
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Tag</th><th>Added Price</th><th>Current Price</th>
+                <th>Gain/Loss</th><th>Day Change</th><th>Notes</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+              <tr>
+                <td><a href="/stock/{{ item.symbol }}" style="font-weight:700;">{{ item.name }}</a><br><span style="font-size:11.5px; color:var(--ink-soft);">{{ item.symbol }}</span></td>
+                <td>{% if item.tag %}<span class="tag-pill">{{ item.tag }}</span>{% else %}—{% endif %}</td>
+                <td>{{ item.added_price or "—" }}</td>
+                <td>{{ item.current_price or "—" }}</td>
+                <td class="{{ 'gain' if item.gain_loss_positive else 'loss' }}">{{ item.gain_loss_pct or "—" }}</td>
+                <td class="{{ 'gain' if item.gain_loss_positive else 'loss' }}">{{ item.day_change_pct or "—" }}</td>
+                <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis;">{{ item.notes or "—" }}</td>
+                <td>
+                  <form method="POST" action="/watchlist/{{ selected.id }}/remove/{{ item.symbol }}">
+                    <button type="submit" class="btn-icon-small">Remove</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p style="color:var(--ink-soft); margin-top:24px;">No stocks yet. Add one above to get started.</p>
+        {% endif %}
+
+        <form method="POST" action="/watchlist/{{ selected.id }}/delete" style="margin-top:32px;">
+          <button type="submit" class="btn-icon-small" onclick="return confirm('Delete this watchlist? This cannot be undone.')">Delete this watchlist</button>
+        </form>
+      {% else %}
+        <p style="color:var(--ink-soft);">Create your first watchlist using the form on the left.</p>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

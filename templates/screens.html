@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screens — VinStock</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/"><span class="bars">📈</span> VinStock</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/screens" class="active">Screens</a>
+      <a href="/screens/custom">Tools</a>
+      <a href="/watchlist">Watchlist</a>
+      <a href="#">About</a>
+    </div>
+    {% if current_user.is_authenticated %}
+      <div class="user-menu"><span>Hi, {{ current_user.name }}</span><a href="/logout">Logout</a></div>
+    {% else %}
+      <div class="user-menu"><a href="/login">Log in</a><a href="/register" class="signup-link">Sign up</a></div>
+    {% endif %}
+  </nav>
+
+  <section class="hero" style="padding-bottom:0;">
+    <h1 style="font-size:32px;">Stock Screens</h1>
+    <p>Run real filters across our tracked universe of NSE stocks.</p>
+  </section>
+
+  <div class="screens-meta-bar">
+    <span>
+      Data freshness: {{ cached_count }}/{{ total_universe }} stocks cached
+      {% if last_refresh %} · last refreshed {{ last_refresh.strftime('%d %b %Y, %H:%M UTC') }}{% else %} · not yet refreshed{% endif %}
+    </span>
+    <a href="/admin/refresh" class="new-screen-btn">Refresh Data</a>
+  </div>
+
+  <section class="section">
+    <div class="card-grid-2">
+      {% for s in screens %}
+      <a class="screen-card" href="/screens/run/{{ s.key }}" style="cursor:pointer;">
+        <div class="icon" style="background:#e7f6ec;">📊</div>
+        <div>
+          <h3>{{ s.label }}{% if s.approximated %}<span class="approx-badge">Approximated</span>{% endif %}</h3>
+          <p>{{ s.description }}</p>
+        </div>
+        <div class="chev">›</div>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:32px; padding:18px; border:1px solid var(--border); border-radius:14px; background:var(--bg-soft);">
+      <strong>Want full control?</strong>
+      <p style="margin:6px 0 10px; color:var(--ink-soft); font-size:14px;">Build your own screen with custom filters across valuation, profitability, growth, and financial health metrics.</p>
+      <a href="/screens/custom" class="new-screen-btn" style="display:inline-block;">Open Custom Screener</a>
+    </div>
+  </section>
+
+  <div style="height:40px;"></div>
+</body>
+</html>

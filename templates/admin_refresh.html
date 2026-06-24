@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Refresh Data — VinStock</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/"><span class="bars">📈</span> VinStock</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/screens">Screens</a>
+      <a href="/screens/custom">Tools</a>
+      <a href="/watchlist">Watchlist</a>
+      <a href="#">About</a>
+    </div>
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="hero" style="padding-bottom:0;">
+    <h1 style="font-size:30px;">Data Refresh</h1>
+    <p>
+      Screens run against a precomputed cache, not live yfinance calls on every page load.
+      Use this page to (re)populate that cache. In production this would run automatically
+      every 6–12 hours via a scheduler.
+    </p>
+  </section>
+
+  <section class="section">
+    <div class="admin-stat-row">
+      <div class="admin-stat-box"><div class="num">{{ cached_count }}</div><div class="lbl">Stocks cached</div></div>
+      <div class="admin-stat-box"><div class="num">{{ failed_count }}</div><div class="lbl">Failed last refresh</div></div>
+      <div class="admin-stat-box"><div class="num">{{ total_universe }}</div><div class="lbl">Total universe</div></div>
+    </div>
+
+    <form method="POST" style="margin-top:20px;">
+      <div class="form-group" style="max-width:300px;">
+        <label>Limit (optional — for a quick test refresh)</label>
+        <input type="number" name="limit" placeholder="e.g. 10 to test, leave blank for all {{ total_universe }}">
+      </div>
+      <button type="submit" class="btn-primary" style="width:auto; padding:12px 28px;" onclick="this.innerText='Refreshing… this can take a few minutes'; this.disabled=true; this.form.submit();">
+        Run Refresh Now
+      </button>
+      <p style="font-size:12.5px; color:var(--ink-soft); margin-top:10px;">
+        Each stock requires one live call to the data provider. Refreshing the full universe
+        (~{{ total_universe }} stocks) can take a few minutes. The page will reload when done.
+      </p>
+    </form>
+  </section>
+
+  <div style="height:40px;"></div>
+</body>
+</html>

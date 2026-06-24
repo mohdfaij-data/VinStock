@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if meta %}{{ meta.label }}{% else %}Screen Results{% endif %} — VinStock</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a class="brand" href="/"><span class="bars">📈</span> VinStock</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/screens" class="active">Screens</a>
+      <a href="/screens/custom">Tools</a>
+      <a href="/watchlist">Watchlist</a>
+      <a href="#">About</a>
+    </div>
+    {% if current_user.is_authenticated %}
+      <div class="user-menu"><span>Hi, {{ current_user.name }}</span><a href="/logout">Logout</a></div>
+    {% else %}
+      <div class="user-menu"><a href="/login">Log in</a><a href="/register" class="signup-link">Sign up</a></div>
+    {% endif %}
+  </nav>
+
+  {% if error %}
+    <div class="error-card"><h2>⚠️ {{ error }}</h2><p><a href="/screens" style="color:var(--green); font-weight:700;">← Back to Screens</a></p></div>
+  {% else %}
+
+  <section class="hero" style="padding-bottom:0;">
+    <div class="breadcrumb" style="margin-bottom:8px;"><a href="/screens" style="color:var(--green); font-weight:700;">← Screens</a></div>
+    <h1 style="font-size:30px;">{{ meta.label }}</h1>
+    <p>{{ meta.description }}</p>
+    {% if meta.approximated %}
+      <div style="background:#fdf0db; color:#a06b00; padding:10px 14px; border-radius:10px; font-size:13.5px; max-width:600px; margin-top:10px;">
+        <strong>Approximated screen:</strong> {{ meta.approximation_note }}
+      </div>
+    {% endif %}
+  </section>
+
+  <div class="results-toolbar">
+    <span style="color:var(--ink-soft); font-size:14px;">{{ results|length }} stock(s) matched</span>
+    <a href="/screens/export/{{ screen_key }}.csv" class="new-screen-btn">Export CSV</a>
+  </div>
+
+  {% if results|length > 0 %}
+  <div class="results-table-wrap">
+    <table class="results-table">
+      <thead>
+        <tr>
+          <th>Company</th><th>Sector</th><th>CMP</th><th>Market Cap</th><th>P/E</th><th>P/B</th>
+          <th>ROE</th><th>ROCE</th><th>Debt/Equity</th><th>Rev Growth</th><th>Profit Growth</th>
+          <th>Div Yield</th><th>VinStock Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr onclick="window.location='/stock/{{ r.symbol }}'">
+          <td><strong>{{ r.name }}</strong><br><span style="font-size:11px; color:var(--ink-soft);">{{ r.symbol }}</span></td>
+          <td>{{ r.sector }}</td>
+          <td>{{ r.price or "—" }}</td>
+          <td>{{ r.market_cap or "—" }}</td>
+          <td>{{ r.pe_ratio or "—" }}</td>
+          <td>{{ r.pb_ratio or "—" }}</td>
+          <td>{{ r.roe or "—" }}</td>
+          <td>{{ r.roce or "—" }}</td>
+          <td>{{ r.debt_to_equity or "—" }}</td>
+          <td>{{ r.revenue_growth or "—" }}</td>
+          <td>{{ r.earnings_growth or "—" }}</td>
+          <td>{{ r.dividend_yield or "—" }}</td>
+          <td>
+            {% if r.vinstock_score is not none %}
+              <span class="score-pill {{ 'high' if r.vinstock_score >= 80 else ('mid' if r.vinstock_score >= 60 else 'low') }}">{{ r.vinstock_score }}</span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p style="padding: 0 32px; color:var(--ink-soft);">
+      No stocks currently match this screen, or the data cache is empty.
+      <a href="/admin/refresh" style="color:var(--green); font-weight:700;">Refresh data</a> and try again.
+    </p>
+  {% endif %}
+
+  <div style="height:40px;"></div>
+  {% endif %}
+</body>
+</html>

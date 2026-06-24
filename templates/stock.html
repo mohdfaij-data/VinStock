@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if view %}{{ view.name }} ({{ view.symbol }}) — VinStock{% else %}VinStock{% endif %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <nav class="navbar">
+    <a class="brand" href="/"><span class="bars">📈</span> VinStock</a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/screens">Screens</a>
+      <a href="/screens/custom">Tools</a>
+      <a href="/watchlist">Watchlist</a>
+      <a href="#">About</a>
+    </div>
+    {% if current_user.is_authenticated %}
+      <div class="user-menu">
+        <span>Hi, {{ current_user.name }}</span>
+        <a href="/logout">Logout</a>
+      </div>
+    {% else %}
+      <div class="user-menu">
+        <a href="/login">Log in</a>
+        <a href="/register" class="signup-link">Sign up</a>
+      </div>
+    {% endif %}
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if error %}
+    <div class="error-card">
+      <h2>⚠️ {{ error }}</h2>
+      <p><a href="/" style="color:var(--green); font-weight:700;">← Back to home</a></p>
+    </div>
+  {% else %}
+
+  <div class="stock-header">
+    <div class="breadcrumb"><a href="/">Home</a> / {{ view.name }}</div>
+    <div class="stock-title-row">
+      <div class="stock-title">
+        <h1>{{ view.name }}</h1>
+        <span class="sym-tag">{{ view.symbol }}</span>
+      </div>
+      <div class="price-block">
+        <div class="price">{{ view.price or "—" }}</div>
+        {% if view.change is not none %}
+          <div class="change {{ 'up' if view.change >= 0 else 'down' }}">
+            {{ '▲' if view.change >= 0 else '▼' }}
+            {{ '%.2f'|format(view.change) }} ({{ '%.2f'|format(view.change_pct) }}%)
+          </div>
+        {% endif %}
+        {% if current_user.is_authenticated %}
+          {% if view.in_watchlist %}
+            <span class="btn-icon-small" style="display:inline-block; margin-top:8px;">✓ In Watchlist</span>
+          {% else %}
+            <form method="POST" action="/stock/{{ view.symbol }}/quick-add" style="margin-top:8px;">
+              <button type="submit" class="btn-secondary" style="padding:6px 14px; font-size:13px;">+ Add to Watchlist</button>
+            </form>
+          {% endif %}
+        {% else %}
+          <a href="/login?next=/stock/{{ view.symbol }}" class="btn-icon-small" style="display:inline-block; margin-top:8px;">+ Add to Watchlist</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TAB BAR ===================== -->
+  <div class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="financials">Financials</button>
+    <button class="tab-btn" data-tab="ratios">Ratios</button>
+    <button class="tab-btn" data-tab="quarterly">Quarterly Results</button>
+    <button class="tab-btn" data-tab="peers">Peer Comparison</button>
+    <button class="tab-btn" data-tab="score">VinStock Score</button>
+  </div>
+
+  <!-- ===================== OVERVIEW TAB ===================== -->
+  <div class="tab-panel active" id="panel-overview">
+    <div class="stat-grid" style="padding-left:0; padding-right:0; margin-top:20px;">
+      <div class="stat-card"><div class="label">Market Cap</div><div class="value">{{ view.market_cap or "—" }}</div></div>
+      <div class="stat-card"><div class="label">P/E Ratio</div><div class="value">{{ view.pe_ratio or "—" }}</div></div>
+      <div class="stat-card"><div class="label">ROE</div><div class="value">{{ view.roe or "—" }}</div></div>
+      <div class="stat-card"><div class="label">Debt/Equity</div><div class="value">{{ view.debt_to_equity or "—" }}</div></div>
+      <div class="stat-card"><div class="label">52W High</div><div class="value">{{ view.high_52w or "—" }}</div></div>
+      <div class="stat-card"><div class="label">52W Low</div><div class="value">{{ view.low_52w or "—" }}</div></div>
+    </div>
+
+    <div class="metric-group-title">Valuation</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">Enterprise Value</div><div class="value">{{ view.enterprise_value or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Forward P/E</div><div class="value">{{ view.forward_pe or "—" }}</div></div>
+      <div class="metric-card"><div class="label">P/B Ratio</div><div class="value">{{ view.pb_ratio or "—" }}</div></div>
+      <div class="metric-card"><div class="label">PEG Ratio</div><div class="value">{{ view.peg_ratio or "—" }}</div></div>
+      <div class="metric-card"><div class="label">EV/EBITDA</div><div class="value">{{ view.ev_to_ebitda or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Dividend Yield</div><div class="value">{{ view.dividend_yield or "—" }}</div></div>
+      <div class="metric-card"><div class="label">EPS</div><div class="value">{{ view.eps or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Book Value</div><div class="value">{{ view.book_value or "—" }}</div></div>
+    </div>
+
+    <div class="metric-group-title">Stock Details</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">Shares Outstanding</div><div class="value">{{ view.shares_outstanding or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Beta</div><div class="value">{{ view.beta or "—" }}</div></div>
+      <div class="metric-card">
+        <div class="label">Face Value</div>
+        <div class="value">
+          {% if view.face_value %}{{ view.face_value }}{% else %}—<span class="coming-soon">Coming soon</span>{% endif %}
+        </div>
+      </div>
+      <div class="metric-card"><div class="label">Sector</div><div class="value" style="font-size:14px;">{{ view.sector }}</div></div>
+    </div>
+
+    <div class="chart-card" style="margin-left:0; margin-right:0;">
+      <h3>Last 6 months</h3>
+      <canvas id="priceChart" height="90"></canvas>
+    </div>
+
+    <div class="about-card" style="margin-left:0; margin-right:0;">
+      <h3>About {{ view.name }}</h3>
+      <p>{{ view.description }}</p>
+      <div class="about-meta">
+        <div><b>Sector</b>{{ view.sector }}</div>
+        <div><b>Industry</b>{{ view.industry }}</div>
+        <div><b>Dividend Yield</b>{{ view.dividend_yield or "—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== FINANCIALS TAB ===================== -->
+  <div class="tab-panel" id="panel-financials">
+    <p class="data-source-note" style="margin-top:20px;">
+      Annual statements shown for as many years as our data source provides
+      (currently up to ~4 years via yfinance). <span class="coming-soon">10-year history coming in Phase 2</span>
+    </p>
+
+    <div class="chart-mini-grid">
+      <div class="chart-mini-card">
+        <h4>Revenue (Annual)</h4>
+        {% if view.revenue_annual %}<canvas id="chartRevenue"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>Operating Profit (Annual)</h4>
+        {% if view.operating_profit_annual %}<canvas id="chartOpProfit"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>Net Profit (Annual)</h4>
+        {% if view.net_profit_annual %}<canvas id="chartNetProfit"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>EPS (Annual)</h4>
+        {% if view.eps_annual %}<canvas id="chartEps"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>Free Cash Flow (Annual)</h4>
+        {% if view.free_cf_annual %}<canvas id="chartFcf"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>Total Debt Trend</h4>
+        {% if view.debt_trend %}<canvas id="chartDebt"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>ROE Trend</h4>
+        {% if view.roe_trend %}<canvas id="chartRoeTrend"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>ROCE Trend</h4>
+        {% if view.roce_trend %}<canvas id="chartRoceTrend"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== RATIOS TAB ===================== -->
+  <div class="tab-panel" id="panel-ratios">
+    <div class="metric-group-title" style="margin-top:20px;">Valuation</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">P/E</div><div class="value">{{ view.pe_ratio or "—" }}</div></div>
+      <div class="metric-card"><div class="label">P/B</div><div class="value">{{ view.pb_ratio or "—" }}</div></div>
+      <div class="metric-card"><div class="label">PEG</div><div class="value">{{ view.peg_ratio or "—" }}</div></div>
+      <div class="metric-card"><div class="label">EV/EBITDA</div><div class="value">{{ view.ev_to_ebitda or "—" }}</div></div>
+      <div class="metric-card"><div class="label">EV/Revenue</div><div class="value">{{ view.ev_to_revenue or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Price/Sales</div><div class="value">{{ view.price_to_sales or "—" }}</div></div>
+    </div>
+
+    <div class="metric-group-title">Profitability</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">ROE</div><div class="value">{{ view.roe or "—" }}</div></div>
+      <div class="metric-card"><div class="label">ROCE</div><div class="value">{{ view.roce or "—" }}</div></div>
+      <div class="metric-card"><div class="label">ROA</div><div class="value">{{ view.roa or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Gross Margin</div><div class="value">{{ view.gross_margin or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Operating Margin</div><div class="value">{{ view.operating_margin or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Net Margin</div><div class="value">{{ view.net_margin or "—" }}</div></div>
+    </div>
+
+    <div class="metric-group-title">Financial Health</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">Debt/Equity</div><div class="value">{{ view.debt_to_equity or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Current Ratio</div><div class="value">{{ view.current_ratio or "—" }}</div></div>
+      <div class="metric-card">
+        <div class="label">Quick Ratio</div>
+        <div class="value">—<span class="coming-soon">Coming soon</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Interest Coverage</div>
+        <div class="value">—<span class="coming-soon">Coming soon</span></div>
+      </div>
+      <div class="metric-card"><div class="label">Cash Per Share</div><div class="value">{{ view.cash_per_share or "—" }}</div></div>
+    </div>
+
+    <div class="metric-group-title">Efficiency</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">Asset Turnover</div><div class="value">{{ view.asset_turnover or "—" }}</div></div>
+      <div class="metric-card">
+        <div class="label">Inventory Turnover</div>
+        <div class="value">—<span class="coming-soon">Coming soon</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Receivable Turnover</div>
+        <div class="value">—<span class="coming-soon">Coming soon</span></div>
+      </div>
+    </div>
+
+    <div class="metric-group-title">Growth</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">Revenue Growth (YoY)</div><div class="value">{{ view.revenue_growth or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Earnings Growth (YoY)</div><div class="value">{{ view.earnings_growth or "—" }}</div></div>
+      <div class="metric-card"><div class="label">EPS Growth</div><div class="value">{{ view.eps_growth or "—" }}</div></div>
+      <div class="metric-card"><div class="label">Book Value Growth</div><div class="value">{{ view.book_value_growth or "—" }}</div></div>
+      <div class="metric-card"><div class="label">FCF Growth</div><div class="value">{{ view.fcf_growth or "—" }}</div></div>
+    </div>
+
+    <div class="metric-group-title">Other</div>
+    <div class="metric-grid" style="margin-bottom: 36px;">
+      <div class="metric-card"><div class="label">Dividend Payout Ratio</div><div class="value">{{ view.dividend_payout_ratio or "—" }}</div></div>
+      <div class="metric-card">
+        <div class="label">Promoter Holding</div>
+        <div class="value">—<span class="coming-soon">Coming soon</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== QUARTERLY TAB ===================== -->
+  <div class="tab-panel" id="panel-quarterly">
+    <div class="qtr-growth-row" style="margin-top:20px;">
+      <div class="qtr-growth-pill">Revenue QoQ<br><b>{{ view.qoq_revenue_growth or "—" }}</b></div>
+      <div class="qtr-growth-pill">Revenue YoY<br><b>{{ view.yoy_revenue_growth or "—" }}</b></div>
+      <div class="qtr-growth-pill">Profit QoQ<br><b>{{ view.qoq_profit_growth or "—" }}</b></div>
+      <div class="qtr-growth-pill">Profit YoY<br><b>{{ view.yoy_profit_growth or "—" }}</b></div>
+    </div>
+    <div class="chart-mini-grid">
+      <div class="chart-mini-card">
+        <h4>Quarterly Revenue</h4>
+        {% if view.revenue_quarterly %}<canvas id="chartQRevenue"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>Quarterly Net Profit</h4>
+        {% if view.net_profit_quarterly %}<canvas id="chartQProfit"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+      <div class="chart-mini-card">
+        <h4>Quarterly EPS</h4>
+        {% if view.eps_quarterly %}<canvas id="chartQEps"></canvas>
+        {% else %}<p class="note">Not available for this stock.</p>{% endif %}
+      </div>
+    </div>
+    <p class="data-source-note">yfinance typically provides ~4-5 most recent quarters.</p>
+  </div>
+
+  <!-- ===================== PEERS TAB ===================== -->
+  <div class="tab-panel" id="panel-peers">
+    <div style="margin-top:20px;">
+    {% if view.peers and view.peers|length > 0 %}
+      <div class="peer-table-wrap">
+        <table class="peer-table">
+          <thead>
+            <tr>
+              <th>Company</th><th>Market Cap</th><th>P/E</th><th>ROE</th><th>ROCE</th>
+              <th>Revenue</th><th>Net Profit</th><th>Debt/Equity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="this-stock">
+              <td>{{ view.name }} ({{ view.symbol }})</td>
+              <td>{{ view.market_cap or "—" }}</td>
+              <td>{{ view.pe_ratio or "—" }}</td>
+              <td>{{ view.roe or "—" }}</td>
+              <td>{{ view.roce or "—" }}</td>
+              <td>{{ (view.revenue_annual["values"][-1] if view.revenue_annual else None) or "—" }}</td>
+              <td>{{ (view.net_profit_annual["values"][-1] if view.net_profit_annual else None) or "—" }}</td>
+              <td>{{ view.debt_to_equity or "—" }}</td>
+            </tr>
+            {% for p in view.peers %}
+            <tr>
+              <td><a href="/stock/{{ p.symbol }}">{{ p.name }} ({{ p.symbol }})</a></td>
+              <td>{{ p.market_cap or "—" }}</td>
+              <td>{{ p.pe or "—" }}</td>
+              <td>{{ p.roe or "—" }}</td>
+              <td>{{ p.roce or "—" }}</td>
+              <td>{{ p.revenue or "—" }}</td>
+              <td>{{ p.net_profit or "—" }}</td>
+              <td>{{ p.debt_to_equity or "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="data-source-note">Peer groups are a hand-curated best-effort list for Phase 1. Industry-driven peer discovery is planned for Phase 2.</p>
+    {% else %}
+      <p style="color:var(--ink-soft); margin: 24px 0 48px;">
+        No peer mapping available yet for {{ view.symbol }}. <span class="coming-soon">Coming soon</span>
+      </p>
+    {% endif %}
+    </div>
+  </div>
+
+  <!-- ===================== SCORE TAB ===================== -->
+  <div class="tab-panel" id="panel-score">
+    <div style="margin-top:20px;">
+    {% if view.score.total is not none %}
+      <div class="score-hero">
+        <div class="score-circle">
+          <div class="num">{{ view.score.total }}</div>
+          <div class="max">/ 100</div>
+        </div>
+        <div>
+          <div class="score-rating {{ view.score.rating | replace(' ', '.') }}">{{ view.score.rating }}</div>
+          <p class="score-disclaimer">
+            The VinStock Score is a heuristic built from public fundamentals (valuation,
+            growth, profitability, financial health) — it is not financial advice or
+            a professional rating. Based on {{ view.score.categories_used }} of 4 categories
+            (some inputs may be unavailable for this stock).
+          </p>
+        </div>
+      </div>
+
+      <div class="score-breakdown">
+        <div class="score-cat">
+          <div class="label">Valuation</div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ (view.score.valuation / 25 * 100) if view.score.valuation is not none else 0 }}%;"></div></div>
+          <div class="val">{{ view.score.valuation if view.score.valuation is not none else "—" }} / 25</div>
+        </div>
+        <div class="score-cat">
+          <div class="label">Growth</div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ (view.score.growth / 25 * 100) if view.score.growth is not none else 0 }}%;"></div></div>
+          <div class="val">{{ view.score.growth if view.score.growth is not none else "—" }} / 25</div>
+        </div>
+        <div class="score-cat">
+          <div class="label">Profitability</div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ (view.score.profitability / 25 * 100) if view.score.profitability is not none else 0 }}%;"></div></div>
+          <div class="val">{{ view.score.profitability if view.score.profitability is not none else "—" }} / 25</div>
+        </div>
+        <div class="score-cat">
+          <div class="label">Financial Health</div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ (view.score.financial_health / 25 * 100) if view.score.financial_health is not none else 0 }}%;"></div></div>
+          <div class="val">{{ view.score.financial_health if view.score.financial_health is not none else "—" }} / 25</div>
+        </div>
+      </div>
+    {% else %}
+      <p style="color:var(--ink-soft); margin: 24px 0 48px;">
+        Not enough fundamental data available to compute a score for {{ view.symbol }}.
+      </p>
+    {% endif %}
+    </div>
+  </div>
+
+  <p class="data-source-note">Data source: {{ view.data_source }} (Yahoo Finance, unofficial). Prices may be delayed.</p>
+
+  <script>
+    // ---------- Tab switching ----------
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // ---------- Chart helpers ----------
+    function lineChart(id, labels, values, color) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      new Chart(el, {
+        type: 'line',
+        data: { labels, datasets: [{ data: values, borderColor: color, backgroundColor: color + '22',
+          fill: true, tension: 0.25, pointRadius: 2, borderWidth: 2 }] },
+        options: { responsive: true, plugins: { legend: { display: false } },
+          scales: { x: { grid: { display: false } }, y: { grid: { color: '#f0f1f3' } } } }
+      });
+    }
+    function barChart(id, labels, values, color) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      new Chart(el, {
+        type: 'bar',
+        data: { labels, datasets: [{ data: values, backgroundColor: color }] },
+        options: { responsive: true, plugins: { legend: { display: false } },
+          scales: { x: { grid: { display: false } }, y: { grid: { color: '#f0f1f3' } } } }
+      });
+    }
+
+    // ---------- Price chart (Overview) ----------
+    lineChart('priceChart', {{ view.price_chart_labels | tojson }}, {{ view.price_chart_values | tojson }}, '#1aab5c');
+
+    // ---------- Financials tab charts ----------
+    {% if view.revenue_annual %}barChart('chartRevenue', {{ view.revenue_annual["labels"] | tojson }}, {{ view.revenue_annual["values"] | tojson }}, '#1aab5c');{% endif %}
+    {% if view.operating_profit_annual %}barChart('chartOpProfit', {{ view.operating_profit_annual["labels"] | tojson }}, {{ view.operating_profit_annual["values"] | tojson }}, '#4f7cf6');{% endif %}
+    {% if view.net_profit_annual %}barChart('chartNetProfit', {{ view.net_profit_annual["labels"] | tojson }}, {{ view.net_profit_annual["values"] | tojson }}, '#8b6ff0');{% endif %}
+    {% if view.eps_annual %}lineChart('chartEps', {{ view.eps_annual["labels"] | tojson }}, {{ view.eps_annual["values"] | tojson }}, '#e08a2b');{% endif %}
+    {% if view.free_cf_annual %}barChart('chartFcf', {{ view.free_cf_annual["labels"] | tojson }}, {{ view.free_cf_annual["values"] | tojson }}, '#1aab5c');{% endif %}
+    {% if view.debt_trend %}barChart('chartDebt', {{ view.debt_trend["labels"] | tojson }}, {{ view.debt_trend["values"] | tojson }}, '#d92d2d');{% endif %}
+    {% if view.roe_trend %}lineChart('chartRoeTrend', {{ view.roe_trend["labels"] | tojson }}, {{ view.roe_trend["values"] | tojson }}, '#1aab5c');{% endif %}
+    {% if view.roce_trend %}lineChart('chartRoceTrend', {{ view.roce_trend["labels"] | tojson }}, {{ view.roce_trend["values"] | tojson }}, '#4f7cf6');{% endif %}
+
+    // ---------- Quarterly tab charts ----------
+    {% if view.revenue_quarterly %}barChart('chartQRevenue', {{ view.revenue_quarterly["labels"] | tojson }}, {{ view.revenue_quarterly["values"] | tojson }}, '#1aab5c');{% endif %}
+    {% if view.net_profit_quarterly %}barChart('chartQProfit', {{ view.net_profit_quarterly["labels"] | tojson }}, {{ view.net_profit_quarterly["values"] | tojson }}, '#8b6ff0');{% endif %}
+    {% if view.eps_quarterly %}lineChart('chartQEps', {{ view.eps_quarterly["labels"] | tojson }}, {{ view.eps_quarterly["values"] | tojson }}, '#e08a2b');{% endif %}
+  </script>
+
+  {% endif %}
+
+  <nav class="tabbar">
+    <a href="/">🏠<span>Home</span></a>
+    <a href="#">▦<span>Screens</span></a>
+    <a href="#" class="fab">🔍</a>
+    <a href="#">🛠<span>Tools</span></a>
+    <a href="#">👤<span>Login</span></a>
+  </nav>
+
+</body>
+</html>

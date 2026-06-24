@@ -1,8 +1,10 @@
 import json
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+import os
 import csv
 import io
+
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 
 from models import db, User, UserPreference, Watchlist, WatchlistStock, Alert, SavedScreen, StockUniverse, StockMetricsCache, ScreenRunCache
 from providers import get_provider
@@ -17,8 +19,17 @@ from services.screener_engine import PREBUILT_SCREENS, run_prebuilt_screen, run_
 
 def create_app():
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///vinstock.db"
+
+    # ------------------------------------------------------------------
+    # Configuration — use environment variables so Render works correctly.
+    # Set SECRET_KEY and DATABASE_URL as env vars in Render's dashboard.
+    # ------------------------------------------------------------------
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
+
+    # Render's managed Postgres gives a DATABASE_URL starting with "postgres://"
+    # but SQLAlchemy requires "postgresql://", so we fix that automatically.
+    raw_db_url = os.environ.get("DATABASE_URL", "sqlite:///vinstock.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = raw_db_url.replace("postgres://", "postgresql://", 1)
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     db.init_app(app)
@@ -77,9 +88,11 @@ def register_routes(app):
     @app.route("/")
     def home():
         return render_template("index.html", quick_analyze=QUICK_ANALYZE)
+
     @app.route("/about")
     def about():
-      return render_template("about.html")
+        return render_template("about.html")
+
     @app.route("/search")
     def search():
         q = request.args.get("q", "").strip().lower()
@@ -147,7 +160,6 @@ def register_routes(app):
 
         items_view = []
         if selected:
-            provider = get_provider()
             for item in selected.items:
                 cache_row = StockMetricsCache.query.filter_by(symbol=item.symbol).first()
                 current_price = cache_row.price if cache_row else None
@@ -191,13 +203,19 @@ def register_routes(app):
         tag = request.form.get("tag") or None
         notes = request.form.get("notes") or None
 
+        # Try to get added price from cache first (avoids a live yfinance call on Render)
         added_price = None
-        try:
-            provider = get_provider()
-            s = provider.get_stock(symbol)
-            added_price = s.price
-        except Exception:
-            pass  # if live price fails, still allow adding without a baseline price
+        cache_row = StockMetricsCache.query.filter_by(symbol=symbol).first()
+        if cache_row and cache_row.price:
+            added_price = cache_row.price
+        else:
+            # Fall back to live fetch only if no cache entry exists
+            try:
+                provider = get_provider()
+                s = provider.get_stock(symbol)
+                added_price = s.price
+            except Exception:
+                pass  # allow adding without a baseline price if all else fails
 
         item, error = watchlist_service.add_stock_to_watchlist(db, WatchlistStock, wl.id, symbol, notes, tag, added_price)
         if error:
@@ -329,18 +347,49 @@ def register_routes(app):
         return jsonify({"success": ok, "error": err})
 
     # ============================================================
-    # STOCK DETAIL PAGE (Phase 1 — unchanged logic from before)
+    # STOCK DETAIL PAGE
+    #
+    # Strategy (cache-first, so this works on Render):
+    #   1. Check StockMetricsCache for a cached row → build view from it.
+    #   2. If no cache row exists, attempt a live yfinance fetch as fallback.
+    #   3. If both fail, render an error telling the user to refresh the cache.
+    #
+    # This fixes the Render deployment issue where Yahoo Finance blocks
+    # requests from cloud datacenter IPs, causing every stock page to 500.
     # ============================================================
     @app.route("/stock/<symbol>")
     def stock(symbol):
         symbol = normalize_symbol(symbol)
-        provider = get_provider()
 
+        # ---- Step 1: try cache first ----
+        cache_row = StockMetricsCache.query.filter_by(symbol=symbol).first()
+
+        if cache_row and not cache_row.refresh_failed and cache_row.price is not None:
+            in_watchlist = False
+            if current_user.is_authenticated:
+                in_watchlist = WatchlistStock.query.join(Watchlist).filter(
+                    Watchlist.user_id == current_user.id,
+                    WatchlistStock.symbol == symbol
+                ).first() is not None
+
+            view = _cache_row_to_stock_view(cache_row, symbol, in_watchlist)
+            return render_template("stock.html", view=view, error=None, symbol=symbol)
+
+        # ---- Step 2: fall back to live fetch ----
+        provider = get_provider()
         try:
             s = provider.get_stock(symbol)
         except Exception as e:
-            return render_template("stock.html", view=None, error=str(e), symbol=symbol)
+            # ---- Step 3: both failed — show a helpful error ----
+            error_msg = (
+                f"Could not load data for {symbol}. "
+                "This usually means the data cache is empty and the live data provider "
+                "is unavailable from this server. "
+                "Please go to /admin/refresh and run a refresh first."
+            )
+            return render_template("stock.html", view=None, error=error_msg, symbol=symbol)
 
+        # Build full view from live yfinance data (same as original code)
         interest_coverage = None
         asset_turnover = None
         if s.revenue_annual and s.total_assets_annual:
@@ -444,15 +493,106 @@ def register_routes(app):
     def quick_add_to_watchlist(symbol):
         symbol = normalize_symbol(symbol)
         wl = watchlist_service.get_or_create_default_watchlist(db, Watchlist, current_user.id)
-        try:
-            provider = get_provider()
-            s = provider.get_stock(symbol)
-            price = s.price
-        except Exception:
-            price = None
-        watchlist_service.add_stock_to_watchlist(db, WatchlistStock, wl.id, symbol, added_price=price)
+
+        # Try cache before making a live network call
+        added_price = None
+        cache_row = StockMetricsCache.query.filter_by(symbol=symbol).first()
+        if cache_row and cache_row.price:
+            added_price = cache_row.price
+        else:
+            try:
+                provider = get_provider()
+                s = provider.get_stock(symbol)
+                added_price = s.price
+            except Exception:
+                pass
+
+        watchlist_service.add_stock_to_watchlist(db, WatchlistStock, wl.id, symbol, added_price=added_price)
         flash(f"Added {symbol} to your watchlist.", "success")
         return redirect(url_for("stock", symbol=symbol))
+
+
+# ---------------------------------------------------------------
+# Helper: build a stock detail view dict from a StockMetricsCache row.
+# Used by the cache-first path in the /stock/<symbol> route so that
+# stock pages work on Render even when live yfinance calls are blocked.
+# Fields that aren't stored in the cache are set to None / "—".
+# ---------------------------------------------------------------
+def _cache_row_to_stock_view(row, symbol, in_watchlist=False):
+    score = compute_vinstock_score({
+        "pe": row.pe_ratio, "pb": row.pb_ratio, "peg": row.peg_ratio, "ev_ebitda": row.ev_to_ebitda,
+        "revenue_growth": row.revenue_growth, "earnings_growth": row.earnings_growth, "eps_growth": None,
+        "roe": row.roe, "roce": row.roce, "net_margin": row.net_margin,
+        "debt_to_equity": row.debt_to_equity, "current_ratio": row.current_ratio,
+        "interest_coverage": None,
+    })
+    return {
+        "symbol": row.symbol,
+        "name": row.name or NAME_LOOKUP.get(symbol, symbol),
+        "sector": row.sector or "—",
+        "industry": row.industry or "—",
+        "description": "Data served from cache. Run /admin/refresh for the latest details.",
+        "price": fmt.fmt_price(row.price),
+        "change": None,
+        "change_pct": row.change_pct,
+        "high_52w": fmt.fmt_price(row.high_52w),
+        "low_52w": fmt.fmt_price(row.low_52w),
+        "beta": None,
+        "market_cap": fmt.fmt_crore(row.market_cap),
+        "enterprise_value": None,
+        "pe_ratio": fmt.fmt_ratio(row.pe_ratio),
+        "forward_pe": None,
+        "pb_ratio": fmt.fmt_ratio(row.pb_ratio),
+        "peg_ratio": fmt.fmt_ratio(row.peg_ratio),
+        "ev_to_ebitda": fmt.fmt_ratio(row.ev_to_ebitda),
+        "ev_to_revenue": None,
+        "price_to_sales": None,
+        "eps": None,
+        "book_value": None,
+        "face_value": None,
+        "shares_outstanding": None,
+        "dividend_yield": fmt.fmt_pct(row.dividend_yield),
+        "dividend_payout_ratio": fmt.fmt_pct(row.dividend_payout_ratio),
+        "roe": fmt.fmt_pct(row.roe),
+        "roa": fmt.fmt_pct(row.roa),
+        "roce": fmt.fmt_pct(row.roce),
+        "gross_margin": None,
+        "operating_margin": fmt.fmt_pct(row.operating_margin),
+        "net_margin": fmt.fmt_pct(row.net_margin),
+        "debt_to_equity": fmt.fmt_ratio(row.debt_to_equity),
+        "current_ratio": fmt.fmt_ratio(row.current_ratio),
+        "quick_ratio": None,
+        "interest_coverage": None,
+        "cash_per_share": None,
+        "asset_turnover": None,
+        "revenue_growth": fmt.fmt_pct(row.revenue_growth),
+        "earnings_growth": fmt.fmt_pct(row.earnings_growth),
+        "eps_growth": None,
+        "book_value_growth": None,
+        "fcf_growth": None,
+        "price_chart_labels": None,
+        "price_chart_values": None,
+        "revenue_annual": None,
+        "operating_profit_annual": None,
+        "net_profit_annual": None,
+        "eps_annual": None,
+        "free_cf_annual": None,
+        "debt_trend": None,
+        "roe_trend": None,
+        "roce_trend": None,
+        "revenue_quarterly": None,
+        "net_profit_quarterly": None,
+        "eps_quarterly": None,
+        "qoq_revenue_growth": None,
+        "yoy_revenue_growth": None,
+        "qoq_profit_growth": None,
+        "yoy_profit_growth": None,
+        "peers": [],
+        "score": score,
+        "data_source": "cache",
+        "warnings": ["Data loaded from cache. Some fields unavailable until next refresh."],
+        "in_watchlist": in_watchlist,
+    }
 
 
 def _row_to_view(r):
